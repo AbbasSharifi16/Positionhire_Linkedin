@@ -17,6 +17,10 @@ const app = {
   name: 'positionhire-linkedin-bot',
   script: 'src/bot.js',
   cwd: __dirname,
+  // fork, not cluster: Telegram allows only ONE long-polling consumer per bot
+  // token. Cluster mode could spawn a second poller and both would get
+  // "409 Conflict: terminated by other getUpdates request".
+  exec_mode: 'fork',
   instances: 1,
   autorestart: true,
   max_restarts: 20,
