@@ -21,6 +21,10 @@ deletable as usual.
 
 ## Setup (on the VPS, same server as the website)
 
+> **Requires Node 18+** — the bot uses the global `fetch` API. Check with `node -v`.
+> If the system default is older (e.g. Node 12), use an nvm install and pin it via
+> `PM2_NODE_INTERPRETER` (see "Run 24/7 with PM2" below).
+
 ```bash
 cd telegram_bot_linkedin_positionhire
 npm install
@@ -56,6 +60,19 @@ pm2 start ecosystem.config.js
 pm2 save
 pm2 startup             # follow the printed command so it survives reboots
 ```
+
+If the machine's default `node` is older than 18, pin a modern one so a reboot
+doesn't resurrect the bot under the old runtime:
+
+```bash
+PM2_NODE_INTERPRETER=/root/.nvm/versions/node/v22.17.0/bin/node \
+  pm2 start ecosystem.config.js
+pm2 save
+```
+
+**Only one instance may poll Telegram at a time.** If a second copy is running
+(e.g. on your laptop), both log `409 Conflict` and one silently stops receiving
+messages. Stop the other copy before starting this one.
 
 Useful: `pm2 logs positionhire-linkedin-bot`, `pm2 restart positionhire-linkedin-bot`.
 
