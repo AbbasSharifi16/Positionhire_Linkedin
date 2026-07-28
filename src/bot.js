@@ -5,7 +5,22 @@ const { createPosting } = require('./api');
 
 assertConfig();
 
-const bot = new TelegramBot(config.telegramToken, { polling: true });
+// Long-poll for up to 50s per request, but give the HTTP socket a 60s hard
+// timeout. Without a socket timeout, a wedged connection can hang forever with
+// no error — the process stays "online" while it silently stops receiving
+// messages (and PM2 never restarts it because nothing crashed). The 60s socket
+// timeout (> the 50s long-poll) turns a hung poll into a polling_error that the
+// library then retries.
+const bot = new TelegramBot(config.telegramToken, {
+  polling: {
+    interval: 300,
+    autoStart: true,
+    params: { timeout: 50 }
+  },
+  request: {
+    timeout: 60000
+  }
+});
 
 const WELCOME =
   'PositionHire LinkedIn bot 👋\n\n' +
@@ -102,8 +117,30 @@ bot.on('message', async (msg) => {
   }
 });
 
+// Watchdog: tolerate transient network blips, but if polling keeps failing the
+// state is likely wedged — exit so PM2 restarts the process from scratch. The
+// streak is reset every time we successfully receive an update (see below).
+let pollErrorStreak = 0;
+const MAX_POLL_ERROR_STREAK = 6;
+
 bot.on('polling_error', (err) => {
-  console.error('[polling_error]', err.code || '', err.message || err);
+  pollErrorStreak += 1;
+  console.error(
+    `[polling_error #${pollErrorStreak}]`,
+    err.code || '',
+    (err.message || err || '').toString()
+  );
+  if (pollErrorStreak >= MAX_POLL_ERROR_STREAK) {
+    console.error(
+      `Reached ${MAX_POLL_ERROR_STREAK} consecutive polling errors — exiting so PM2 restarts cleanly.`
+    );
+    process.exit(1);
+  }
+});
+
+// Any successfully received update means polling is healthy again.
+bot.on('message', () => {
+  pollErrorStreak = 0;
 });
 
 console.log('PositionHire LinkedIn Telegram bot is running (polling).');
